@@ -199,16 +199,74 @@ DOWNLOAD SUMMARY
 ==================================================
 ```
 
+---
+
+## Data Analysis
+
+After downloading, you can analyze bid amounts by UNSPSC category:
+
+### Analyze Downloaded Data
+
+```bash
+python -m seao_downloader.analyze --data-dir ./data
+```
+
+### Analysis Options
+
+```bash
+# Show top 50 categories
+python -m seao_downloader.analyze --data-dir ./data --top 50
+
+# Sort by number of tenders instead of value
+python -m seao_downloader.analyze --data-dir ./data --sort-by total_tenders
+
+# Export all individual bid records to CSV (warning: large file)
+python -m seao_downloader.analyze --data-dir ./data --export-records
+
+# Output to different directory
+python -m seao_downloader.analyze --data-dir ./data --output-dir ./analysis
+```
+
+### Analysis Output Files
+
+| File | Description |
+|------|-------------|
+| `unspsc_summary.csv` | Aggregated statistics by UNSPSC code |
+| `unspsc_summary.json` | Same data in JSON format with metadata |
+| `all_bids.csv` | All individual bid records (with `--export-records`) |
+
+### CSV Output Columns
+
+The `unspsc_summary.csv` contains:
+
+| Column | Description |
+|--------|-------------|
+| `unspsc_code` | UNSPSC classification code |
+| `unspsc_description` | Human-readable description |
+| `category_code` | Quebec-specific category (G1-G31, S1-S19, C01-C03, etc.) |
+| `total_tenders` | Number of tenders in this category |
+| `total_bids` | Number of bids received |
+| `total_awards` | Number of contracts awarded |
+| `total_bid_value` | Sum of all bid values (CAD) |
+| `avg_bid_value` | Average bid value |
+| `min_bid_value` / `max_bid_value` | Range of bid values |
+| `total_award_value` | Sum of all award values (CAD) |
+| `avg_award_value` | Average award value |
+
+---
+
 ## Architecture
 
-The project follows **separation of concerns** with 4 focused modules:
+The project follows **separation of concerns** with 5 focused modules:
 
 | Module | Responsibility |
 |--------|----------------|
 | `discovery.py` | CKAN API communication and resource filtering |
 | `downloader.py` | HTTP requests, rate limiting, retries |
 | `persistence.py` | File naming, paths, manifest management |
-| `main.py` | CLI parsing and workflow orchestration |
+| `analyzer.py` | OCDS parsing, UNSPSC aggregation, export |
+| `main.py` | Download CLI orchestration |
+| `analyze.py` | Analysis CLI orchestration |
 
 ### Design Principles
 
