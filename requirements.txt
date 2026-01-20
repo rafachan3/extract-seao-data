@@ -1,0 +1,14 @@
+# SEAO JSON Downloader - Dependencies
+#
+# This project uses Python standard library only.
+# No external dependencies required.
+#
+# Python 3.11+ is required for:
+# - dataclasses with slots
+# - typing improvements
+# - walrus operator in file streaming
+#
+# Optional development dependencies:
+# pytest>=7.0.0        # For running tests
+# mypy>=1.0.0          # For type checking
+# ruff>=0.1.0          # For linting
