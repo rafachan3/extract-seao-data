@@ -16,6 +16,7 @@ This project provides a reliable, polite downloader for extracting public procur
 - **Machine-readable manifest** — Full audit trail with timestamps and status
 - **Dry-run mode** — Preview what will be downloaded without downloading
 - **Parallel downloads** — Optional concurrency (use conservatively)
+- **Silver layer extraction** — Transform raw JSON to clean, flat CSV/Parquet
 
 ## Project Structure
 
@@ -25,13 +26,16 @@ seao_downloader/
 ├── discovery.py       # CKAN API client for resource discovery
 ├── downloader.py      # HTTP client with retries and rate limiting
 ├── persistence.py     # Filesystem and manifest management
-└── main.py            # CLI entrypoint and orchestration
+├── main.py            # Download CLI entrypoint and orchestration
+├── silver_layer.py    # Silver layer extraction logic (JSON → CSV/Parquet)
+└── extract_silver.py  # Silver layer extraction CLI
 ```
 
 ## Prerequisites
 
 - **Python 3.11+** (uses modern typing features and walrus operator)
 - **No external dependencies** — uses Python standard library only
+- **Optional: pyarrow** — for Parquet output format
 
 ## Installation
 
@@ -44,6 +48,9 @@ cd extract-seao-data
 python3 -m venv venv
 source venv/bin/activate  # Linux/macOS
 # or: venv\Scripts\activate  # Windows
+
+# (Optional) Install pyarrow for Parquet support
+pip install pyarrow
 ```
 
 ## Usage
@@ -121,7 +128,7 @@ If you encounter SSL certificate verification errors (common on macOS), you can 
 python -m seao_downloader.main --no-verify-ssl
 ```
 
-### Full Options
+### Full Download Options
 
 ```
 usage: seao-downloader [-h] [--out-dir OUT_DIR] [--max-workers MAX_WORKERS]
@@ -201,72 +208,82 @@ DOWNLOAD SUMMARY
 
 ---
 
-## Data Analysis
+## Silver Layer Extraction
 
-After downloading, you can analyze bid amounts by UNSPSC category:
+After downloading, you can transform the raw JSON (bronze layer) into a clean, flattened CSV or Parquet file (silver layer) for analysis.
 
-### Analyze Downloaded Data
-
-```bash
-python -m seao_downloader.analyze --data-dir ./data
-```
-
-### Analysis Options
+### Extract Silver Layer
 
 ```bash
-# Show top 50 categories
-python -m seao_downloader.analyze --data-dir ./data --top 50
-
-# Sort by number of tenders instead of value
-python -m seao_downloader.analyze --data-dir ./data --sort-by total_tenders
-
-# Export all individual bid records to CSV (warning: large file)
-python -m seao_downloader.analyze --data-dir ./data --export-records
-
-# Output to different directory
-python -m seao_downloader.analyze --data-dir ./data --output-dir ./analysis
+python -m seao_downloader.extract_silver --data-dir ./data
 ```
 
-### Analysis Output Files
+### Extraction Options
 
-| File | Description |
-|------|-------------|
-| `unspsc_summary.csv` | Aggregated statistics by UNSPSC code |
-| `unspsc_summary.json` | Same data in JSON format with metadata |
-| `all_bids.csv` | All individual bid records (with `--export-records`) |
+```bash
+# Extract to CSV (default)
+python -m seao_downloader.extract_silver --data-dir ./data
 
-### CSV Output Columns
+# Extract to Parquet (requires pyarrow)
+python -m seao_downloader.extract_silver --data-dir ./data --format parquet
 
-The `unspsc_summary.csv` contains:
+# Custom output path
+python -m seao_downloader.extract_silver --data-dir ./data --output ./silver.csv
 
-| Column | Description |
-|--------|-------------|
-| `unspsc_code` | UNSPSC classification code |
-| `unspsc_description` | Human-readable description |
-| `category_code` | Quebec-specific category (G1-G31, S1-S19, C01-C03, etc.) |
-| `total_tenders` | Number of tenders in this category |
-| `total_bids` | Number of bids received |
-| `total_awards` | Number of contracts awarded |
-| `total_bid_value` | Sum of all bid values (CAD) |
-| `avg_bid_value` | Average bid value |
-| `min_bid_value` / `max_bid_value` | Range of bid values |
-| `total_award_value` | Sum of all award values (CAD) |
-| `avg_award_value` | Average award value |
+# Verbose logging
+python -m seao_downloader.extract_silver --data-dir ./data -v
+```
+
+### Full Extraction Options
+
+```
+usage: seao-extract-silver [-h] --data-dir DATA_DIR [--output OUTPUT]
+                           [--format {csv,parquet}] [--verbose]
+
+Extract silver layer (complete flattened CSV/Parquet) from bronze layer (raw JSON).
+
+options:
+  -h, --help            show this help message and exit
+  --data-dir DATA_DIR   Directory containing bronze layer JSON files.
+  --output OUTPUT       Output file path (default: data-dir/silver_layer.csv).
+  --format {csv,parquet}
+                        Output format (default: csv). Parquet requires pyarrow.
+  --verbose, -v         Enable verbose logging.
+```
+
+### Silver Layer Output
+
+The extraction produces one row per release (contract/tender) with all nested OCDS data flattened into columns:
+
+| Column Group | Description | Columns |
+|--------------|-------------|---------|
+| Release metadata | OCID, release ID, date, language, tags | 6 |
+| Buyer info | Buyer ID, name, address details | 8 |
+| Tender info | Title, status, procurement method, dates | 14 |
+| Classifications | UNSPSC codes, Quebec category codes | 8 |
+| Bids | Bid counts, values (total/min/max) | 6 |
+| Awards | Award ID, status, date, amount | 6 |
+| Supplier info | Supplier ID, name, address, NEQ | 8 |
+| Contract info | Contract ID, status, amount, dates | 6 |
+| Documents | Document URL | 1 |
+| Source metadata | Source file, extraction timestamp | 2 |
+
+**Note:** CSV files include a UTF-8 BOM for proper French character display in Excel.
 
 ---
 
 ## Architecture
 
-The project follows **separation of concerns** with 5 focused modules:
+The project follows **separation of concerns** with 6 focused modules:
 
 | Module | Responsibility |
 |--------|----------------|
 | `discovery.py` | CKAN API communication and resource filtering |
 | `downloader.py` | HTTP requests, rate limiting, retries |
 | `persistence.py` | File naming, paths, manifest management |
-| `analyzer.py` | OCDS parsing, UNSPSC aggregation, export |
+| `silver_layer.py` | OCDS JSON parsing and flattening to tabular format |
 | `main.py` | Download CLI orchestration |
-| `analyze.py` | Analysis CLI orchestration |
+| `extract_silver.py` | Silver layer extraction CLI |
 
 ### Design Principles
 
